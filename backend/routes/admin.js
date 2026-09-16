@@ -3,15 +3,19 @@ const { Op } = require('sequelize');
 const { User, Certification, Topic, Question, TestAttempt, Answer, Achievement, UserAchievement } = require('../models');
 const { adminAuth } = require('../middleware/auth');
 const multer = require('multer');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
 
 const router = express.Router();
 
-// File upload config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// File upload config (in-memory for serverless compatibility)
+const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Admin dashboard stats
@@ -161,10 +165,28 @@ router.post('/questions/bulk', adminAuth, async (req, res) => {
   }
 });
 
-// Upload image
+// Upload image to Cloudinary
 router.post('/upload', adminAuth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ url: `/uploads/${req.file.filename}`, filename: req.file.filename });
+
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    return res.status(500).json({
+      error: 'Cloudinary credentials are not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in environment variables.',
+    });
+  }
+
+  const uploadStream = cloudinary.uploader.upload_stream(
+    { folder: 'networking_certifications', resource_type: 'auto' },
+    (error, result) => {
+      if (error) {
+        console.error('Cloudinary upload error:', error);
+        return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
+      }
+      res.json({ url: result.secure_url, filename: result.public_id });
+    }
+  );
+
+  uploadStream.end(req.file.buffer);
 });
 
 // ─── USER MANAGEMENT ────────────────────────────────────────

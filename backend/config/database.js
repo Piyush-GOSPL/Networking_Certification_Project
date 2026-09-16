@@ -1,27 +1,32 @@
 const { Sequelize } = require('sequelize');
-const path = require('path');
 
 let sequelize;
 
 if (process.env.DATABASE_URL) {
   sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
-    logging: false,
     dialectOptions: {
       ssl: {
         require: true,
         rejectUnauthorized: false,
       },
     },
+    logging: false,
     define: {
       timestamps: true,
       underscored: true,
     },
   });
 } else {
+  // Inactive placeholder configuration if DATABASE_URL is not yet provided
   sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: path.join(__dirname, '..', 'database.sqlite'),
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false,
+      },
+    },
     logging: false,
     define: {
       timestamps: true,
