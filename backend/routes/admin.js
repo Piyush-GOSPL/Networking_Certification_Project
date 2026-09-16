@@ -3,16 +3,9 @@ const { Op } = require('sequelize');
 const { User, Certification, Topic, Question, TestAttempt, Answer, Achievement, UserAchievement } = require('../models');
 const { adminAuth } = require('../middleware/auth');
 const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
+const { put } = require('@vercel/blob');
 
 const router = express.Router();
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 // File upload config (in-memory for serverless compatibility)
 const storage = multer.memoryStorage();
@@ -165,28 +158,33 @@ router.post('/questions/bulk', adminAuth, async (req, res) => {
   }
 });
 
-// Upload image to Cloudinary
-router.post('/upload', adminAuth, upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+// Upload image to Vercel Blob
+router.post('/upload', adminAuth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-    return res.status(500).json({
-      error: 'Cloudinary credentials are not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in environment variables.',
-    });
-  }
-
-  const uploadStream = cloudinary.uploader.upload_stream(
-    { folder: 'networking_certifications', resource_type: 'auto' },
-    (error, result) => {
-      if (error) {
-        console.error('Cloudinary upload error:', error);
-        return res.status(500).json({ error: 'Failed to upload image to Cloudinary' });
-      }
-      res.json({ url: result.secure_url, filename: result.public_id });
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      return res.status(500).json({
+        error: 'Vercel Blob is not configured. Please set BLOB_READ_WRITE_TOKEN in environment variables.',
+      });
     }
-  );
 
-  uploadStream.end(req.file.buffer);
+    const safeFilename = `questions/${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const blob = await put(safeFilename, req.file.buffer, {
+      access: 'public',
+      token,
+      contentType: req.file.mimetype,
+    });
+
+    res.json({
+      url: blob.url,
+      filename: blob.pathname,
+    });
+  } catch (error) {
+    console.error('Vercel Blob upload error:', error);
+    res.status(500).json({ error: 'Failed to upload image to Vercel Blob: ' + error.message });
+  }
 });
 
 // ─── USER MANAGEMENT ────────────────────────────────────────

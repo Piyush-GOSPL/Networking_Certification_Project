@@ -4,9 +4,10 @@ const { sequelize, User, Certification, Topic, Question, Achievement } = require
 async function seedDatabase() {
   console.log('🚀 Starting database migration and seeding...\n');
 
-  if (!process.env.DATABASE_URL) {
-    console.error('❌ Error: DATABASE_URL is not defined in environment variables or .env file.');
-    console.error('Please configure DATABASE_URL (e.g. your Neon Postgres connection string) before running seed.\n');
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING;
+  if (!dbUrl) {
+    console.error('❌ Error: DATABASE_URL / POSTGRES_URL is not defined in environment variables or .env file.');
+    console.error('Please configure DATABASE_URL or POSTGRES_URL (your Neon Postgres connection string) before running seed.\n');
     process.exit(1);
   }
 
